@@ -32,5 +32,24 @@ app.post('/render', async (req, res) => {
     res.status(500).json({ error: String(e && e.message ? e.message : e).slice(0, 300) });
   } finally { if (ctx) await ctx.close().catch(() => {}); }
 });
+app.post('/render-pdf', async (req, res) => {
+  if (TOKEN && req.headers['x-render-token'] !== TOKEN) return res.status(401).json({ error: 'unauthorized' });
+  const { html, format = 'A4' } = req.body || {};
+  if (!html || typeof html !== 'string') return res.status(400).json({ error: 'html (string) required' });
+  let ctx;
+  try {
+    const b = await getBrowser();
+    ctx = await b.newContext({ viewport: { width: 794, height: 1123 } });
+    const page = await ctx.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.evaluate(() => (document.fonts ? document.fonts.ready : Promise.resolve()));
+    await page.waitForTimeout(300);
+    const pdf = await page.pdf({ format, printBackground: true, margin: { top: 0, right: 0, bottom: 0, left: 0 } });
+    res.set('Content-Type', 'application/pdf').send(pdf);
+  } catch (e) {
+    res.status(500).json({ error: String(e && e.message ? e.message : e).slice(0, 300) });
+  } finally { if (ctx) await ctx.close().catch(() => {}); }
+});
+
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log('qp-beam-render listening on', port));
